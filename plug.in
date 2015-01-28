@@ -1,0 +1,5 @@
+MYSQL_PLUGIN(mysqlbackup_plugin, [plugin which provides SQL interface for MySQL backup tools]),
+                              [SQL interface for MySQL backup tools.]
+MYSQL_PLUGIN_DYNAMIC(mysqlbackup_plugin, [mysqlbackup_plugin.la])
+MYSQL_PLUGIN_STATIC(mysqlbackup_plugin, [mysqlbackup_plugin.a])
+
