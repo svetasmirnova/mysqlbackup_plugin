@@ -75,8 +75,6 @@ static int perform_backup(Mysql_rewrite_pre_parse_param *param)
       ostringstream oss;
       switch(backup_tool_name) {
 	  case MYSQLBACKUP:
-	  case MYSQL_PUMP:
-	  case LIBMYSQL_PUMP:
 	      oss << "SELECT '" << supported_tools[backup_tool_name] << " not supported yet.'";
 	      param->rewritten_query_length= strlen(oss.str().c_str());
 	      param->rewritten_query= new char[param->rewritten_query_length + 1];
@@ -118,7 +116,7 @@ static st_mysql_rewrite_pre_parse mysqlbackup_plugin_descriptor= {
 /* System variables */
 
 static MYSQL_SYSVAR_STR(backup_dir, backup_dir_value, PLUGIN_VAR_MEMALLOC, "Default directory where to store backup", NULL, NULL, NULL);
-static MYSQL_SYSVAR_ENUM(backup_tool, backup_tool_name, PLUGIN_VAR_RQCMDARG, "Backup tool. Possible values: mysqldump|mysql_pump|libmysql_pamp|mysqlbackup", NULL, NULL, MYSQLDUMP, &supported_tools_typelib);
+static MYSQL_SYSVAR_ENUM(backup_tool, backup_tool_name, PLUGIN_VAR_RQCMDARG, "Backup tool. Possible values: mysqldump|mysqlbackup", NULL, NULL, MYSQLDUMP, &supported_tools_typelib);
 static MYSQL_SYSVAR_STR(backup_tool_basedir, backup_tool_basedir_value, PLUGIN_VAR_MEMALLOC, "Base dir for backup tool. Default: \"\"", NULL, NULL, "");
 static MYSQL_SYSVAR_STR(backup_tool_options, backup_tool_options_value, PLUGIN_VAR_MEMALLOC, "Options for backup tool", NULL, NULL, "");
 
@@ -136,7 +134,7 @@ mysql_declare_plugin(mysqlbackup_plugin)
   &mysqlbackup_plugin_descriptor,
   "mysqlbackup_plugin",
   "Sveta Smirnova",
-  "Plugin which provides SQL interface for MySQL Enterprise Backup",
+  "Plugin which provides SQL interface for MySQL Enterprise Backup and mysqldump",
   PLUGIN_LICENSE_GPL,
   mysqlbackup_plugin_init,
   NULL,
