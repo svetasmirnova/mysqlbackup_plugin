@@ -60,7 +60,7 @@ static int mysqlbackup_plugin_init(MYSQL_PLUGIN plugin_ref)
 
 static int perform_backup(Mysql_rewrite_pre_parse_param *param)
 {
-  if (0 == strcmp("backup server", param->query))
+  if (0 == strcasecmp("backup server", param->query))
   {
 
     if (!backup_dir_value)
