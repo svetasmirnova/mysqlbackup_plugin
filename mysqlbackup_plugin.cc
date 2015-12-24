@@ -23,11 +23,38 @@
 #include <iostream>
 
 #include <mysql/plugin.h>
-#include <mysql/plugin_query_rewrite.h>
+#include <mysql/plugin_audit.h>
+#include <mysql/service_mysql_alloc.h>
+#include <my_thread.h> // my_thread_handle needed by mysql_memory.h
+#include <mysql/psi/mysql_memory.h>
 #include <typelib.h>
 
 using namespace std;
 static MYSQL_PLUGIN plugin_info_ptr;
+
+/* instrument the memory allocation */
+#ifdef HAVE_PSI_INTERFACE
+static PSI_memory_key key_memory_mysqlbackup;
+
+static PSI_memory_info all_rewrite_memory[]=
+{
+    { &key_memory_mysqlbackup, "mysqlbackup", 0 } 
+};
+
+static int mysqlbackup_plugin_init(MYSQL_PLUGIN plugin_ref)
+{
+  plugin_info_ptr= plugin_ref;
+  const char* category= "sql";
+  int count;
+
+  count= array_elements(all_rewrite_memory);
+  mysql_memory_register(category, all_rewrite_memory, count);
+  return 0; /* success */
+}
+#else
+#define plugin_init NULL
+#define key_memory_mysqlbackup PSI_NOT_INSTRUMENTED
+#endif /* HAVE_PSI_INTERFACE */
 
 static char* backup_dir_value;
 ulong backup_tool_name;
@@ -52,65 +79,63 @@ enum supported_tools_t {
     MYSQLDUMP
 };
 
-static int mysqlbackup_plugin_init(MYSQL_PLUGIN plugin_ref)
+static int perform_backup(MYSQL_THD thd, mysql_event_class_t event_class,
+                          const void *event)
 {
-  plugin_info_ptr= plugin_ref;
-  return 0;
-}
+  const struct mysql_event_parse *event_parse=
+    static_cast<const struct mysql_event_parse *>(event);
 
-static int perform_backup(Mysql_rewrite_pre_parse_param *param)
-{
-  if (0 == strcasecmp("backup server", param->query))
+  if (event_parse->event_subclass != MYSQL_AUDIT_PARSE_PREPARSE)
+      return 0;
+
+  if (0 == strcasecmp("backup server",  event_parse->query.str))
   {
 
     if (!backup_dir_value)
     {
       const char* newq= "SELECT 'You must set global variable mysqlbackup_plugin_backup_dir before running this command!'";
-      param->rewritten_query= new char[strlen(newq) + 1];
-      param->rewritten_query_length=strlen(newq);
-      strncpy(param->rewritten_query, newq, param->rewritten_query_length + 1);
+      char *rewritten_query= static_cast<char *>(my_malloc(key_memory_mysqlbackup, strlen(newq) + 1, MYF(0)));
+      strncpy(rewritten_query, newq, strlen(newq) + 1);
+      event_parse->rewritten_query->str= rewritten_query;
+      event_parse->rewritten_query->length=strlen(newq);
     }
     else
     {
       ostringstream oss;
+      char *rewritten_query;
       switch(backup_tool_name) {
 	  case MYSQLBACKUP:
 	      oss << "SELECT '" << supported_tools[backup_tool_name] << " not supported yet.'";
-	      param->rewritten_query_length= strlen(oss.str().c_str());
-	      param->rewritten_query= new char[param->rewritten_query_length + 1];
-	      strncpy(param->rewritten_query, oss.str().c_str(), param->rewritten_query_length + 1);
+        rewritten_query= static_cast<char *>(my_malloc(key_memory_mysqlbackup, strlen(oss.str().c_str()) + 1, MYF(0))); 
+        strncpy(rewritten_query, oss.str().c_str(), strlen(oss.str().c_str()));
+        event_parse->rewritten_query->str= rewritten_query;
+	      event_parse->rewritten_query->length= strlen(oss.str().c_str());
 	      break;
 	  case MYSQLDUMP:
 	      cerr << "Processing mysqldump" << endl;
 	      if (backup_tool_basedir_value && 0 < strlen(backup_tool_basedir_value))
-		  oss << "SELECT run_external(concat('" << backup_tool_basedir_value << "/" << supported_tools[backup_tool_name] << " " << backup_tool_options_value << " --socket=', @@socket, ' --all-databases > " << backup_dir_value << "/backup_', date_format(now(), '%Y-%m-%e_%H:%i:%s'), '.sql'))";
+		      oss << "SELECT run_external(concat('" << backup_tool_basedir_value << "/" << supported_tools[backup_tool_name] << " " << backup_tool_options_value << " --socket=', @@socket, ' --all-databases > " << backup_dir_value << "/backup_', date_format(now(), '%Y-%m-%e_%H:%i:%s'), '.sql'))";
 	      else
-		  oss << "SELECT run_external(concat('" << supported_tools[backup_tool_name] << " " << backup_tool_options_value << " --socket=', @@socket, ' --all-databases > " << backup_dir_value << "/backup_', date_format(now(), '%Y-%m-%e_%H:%i:%s'), '.sql'))";
+		      oss << "SELECT run_external(concat('" << supported_tools[backup_tool_name] << " " << backup_tool_options_value << " --socket=', @@socket, ' --all-databases > " << backup_dir_value << "/backup_', date_format(now(), '%Y-%m-%e_%H:%i:%s'), '.sql'))";
 	      cerr << oss.str() << endl;
-	      param->rewritten_query_length= strlen(oss.str().c_str());
-	      param->rewritten_query= new char[param->rewritten_query_length + 1];
-	      strncpy(param->rewritten_query, oss.str().c_str(), param->rewritten_query_length + 1);
+        rewritten_query= static_cast<char *>(my_malloc(key_memory_mysqlbackup, strlen(oss.str().c_str()) + 1, MYF(0)));
+        strncpy(rewritten_query, oss.str().c_str(), strlen(oss.str().c_str()));
+        event_parse->rewritten_query->str= rewritten_query;
+        event_parse->rewritten_query->length= strlen(oss.str().c_str());
 	      break;
       }
     }
 
-    param->flags|= FLAG_REWRITE_PLUGIN_QUERY_REWRITTEN;
+    *((int *)event_parse->flags)|= (int)MYSQL_AUDIT_PARSE_REWRITE_PLUGIN_QUERY_REWRITTEN;
   }
   return 0;
 }
 
-static int free_resources(Mysql_rewrite_pre_parse_param *param)
-{
-  delete [] param->rewritten_query;
-  param->rewritten_query= NULL;
-  param->rewritten_query_length= 0;
-  return 0;
-}
-
-static st_mysql_rewrite_pre_parse mysqlbackup_plugin_descriptor= {
-  MYSQL_REWRITE_PRE_PARSE_INTERFACE_VERSION,    /* interface version          */
+static st_mysql_audit mysqlbackup_plugin_descriptor= {
+  MYSQL_AUDIT_INTERFACE_VERSION,                 /* interface version          */
+  NULL,
   perform_backup,                               /* performs backup            */
-  free_resources,                               /* frees allocated resources  */
+  { 0, 0, (unsigned long) MYSQL_AUDIT_PARSE_ALL,}
 };
 
 /* System variables */
@@ -120,7 +145,7 @@ static MYSQL_SYSVAR_ENUM(backup_tool, backup_tool_name, PLUGIN_VAR_RQCMDARG, "Ba
 static MYSQL_SYSVAR_STR(backup_tool_basedir, backup_tool_basedir_value, PLUGIN_VAR_MEMALLOC, "Base dir for backup tool. Default: \"\"", NULL, NULL, "");
 static MYSQL_SYSVAR_STR(backup_tool_options, backup_tool_options_value, PLUGIN_VAR_MEMALLOC, "Options for backup tool", NULL, NULL, "");
 
-static struct st_mysql_sys_var *mysqlbackup_plugin_vars[] = {
+static struct st_mysql_sys_var *mysqlbackup_plugin_sys_vars[] = {
     MYSQL_SYSVAR(backup_dir),
     MYSQL_SYSVAR(backup_tool),
     MYSQL_SYSVAR(backup_tool_basedir),
@@ -130,18 +155,20 @@ static struct st_mysql_sys_var *mysqlbackup_plugin_vars[] = {
 
 mysql_declare_plugin(mysqlbackup_plugin)
 {
-  MYSQL_REWRITE_PRE_PARSE_PLUGIN,
+  MYSQL_AUDIT_PLUGIN,
   &mysqlbackup_plugin_descriptor,
   "mysqlbackup_plugin",
   "Sveta Smirnova",
   "Plugin which provides SQL interface for MySQL Enterprise Backup and mysqldump",
   PLUGIN_LICENSE_GPL,
   mysqlbackup_plugin_init,
-  NULL,
-  0x0001,                                       /* version 0.0.1      */
+  NULL,                                         /* mysqlbackup_plugin_deinit - TODO */
+  0x0002,                                       /* version 0.0.2      */
   NULL,                                         /* status variables   */
-  mysqlbackup_plugin_vars,                      /* system variables   */
+  mysqlbackup_plugin_sys_vars,                  /* system variables   */
   NULL,                                         /* config options     */
   0,                                            /* flqgs              */
 }
 mysql_declare_plugin_end;
+
+/* vim: set tabstop=2 shiftwidth=2 softtabstop=2: */

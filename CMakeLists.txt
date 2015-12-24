@@ -13,5 +13,9 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
 
-MYSQL_ADD_PLUGIN(mysqlbackup_plugin mysqlbackup_plugin.cc
-  MODULE_ONLY MODULE_OUTPUT_NAME "mysqlbackup_plugin")
+IF(DEFINED MYSQL_NO_DASH_VERSION)
+    IF("5.7.4" VERSION_LESS ${MYSQL_NO_DASH_VERSION})
+    MYSQL_ADD_PLUGIN(mysqlbackup_plugin mysqlbackup_plugin.cc
+      MODULE_ONLY MODULE_OUTPUT_NAME "mysqlbackup_plugin")
+  ENDIF()
+ENDIF()
