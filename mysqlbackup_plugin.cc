@@ -1,4 +1,5 @@
 /*  Copyright (c) 2014, Oracle and/or its affiliates. All rights reserved.
+    Copyright (c) 2015, Sveta Smirnova. All rights reserved.
 
     This program is free software; you can redistribute it and/or modify it
     under the terms of the GNU General Public License as published by the
@@ -13,6 +14,7 @@
     along with this program; if not, write to the Free Software
     Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
     02110-1301  USA */
+    
 #ifndef MYSQL_SERVER
 #define MYSQL_SERVER
 #endif
@@ -64,6 +66,7 @@ static char* backup_tool_options_value;
 static const char* supported_tools[] = {
     "mysqlbackup",
     "mysqldump",
+    "mysqlpump",
     NullS
 };
 
@@ -76,7 +79,8 @@ static TYPELIB supported_tools_typelib = {
 
 enum supported_tools_t {
     MYSQLBACKUP,
-    MYSQLDUMP
+    MYSQLDUMP,
+    MYSQLPUMP
 };
 
 static int perform_backup(MYSQL_THD thd, mysql_event_class_t event_class,
@@ -104,25 +108,33 @@ static int perform_backup(MYSQL_THD thd, mysql_event_class_t event_class,
       ostringstream oss;
       char *rewritten_query;
       switch(backup_tool_name) {
-	  case MYSQLBACKUP:
-	      oss << "SELECT '" << supported_tools[backup_tool_name] << " not supported yet.'";
-        rewritten_query= static_cast<char *>(my_malloc(key_memory_mysqlbackup, strlen(oss.str().c_str()) + 1, MYF(0))); 
-        strncpy(rewritten_query, oss.str().c_str(), strlen(oss.str().c_str()));
-        event_parse->rewritten_query->str= rewritten_query;
-	      event_parse->rewritten_query->length= strlen(oss.str().c_str());
-	      break;
-	  case MYSQLDUMP:
-	      cerr << "Processing mysqldump" << endl;
-	      if (backup_tool_basedir_value && 0 < strlen(backup_tool_basedir_value))
-		      oss << "SELECT run_external(concat('" << backup_tool_basedir_value << "/" << supported_tools[backup_tool_name] << " " << backup_tool_options_value << " --socket=', @@socket, ' --all-databases > " << backup_dir_value << "/backup_', date_format(now(), '%Y-%m-%e_%H:%i:%s'), '.sql'))";
-	      else
-		      oss << "SELECT run_external(concat('" << supported_tools[backup_tool_name] << " " << backup_tool_options_value << " --socket=', @@socket, ' --all-databases > " << backup_dir_value << "/backup_', date_format(now(), '%Y-%m-%e_%H:%i:%s'), '.sql'))";
-	      cerr << oss.str() << endl;
-        rewritten_query= static_cast<char *>(my_malloc(key_memory_mysqlbackup, strlen(oss.str().c_str()) + 1, MYF(0)));
-        strncpy(rewritten_query, oss.str().c_str(), strlen(oss.str().c_str()));
-        event_parse->rewritten_query->str= rewritten_query;
-        event_parse->rewritten_query->length= strlen(oss.str().c_str());
-	      break;
+        case MYSQLBACKUP:
+          oss << "SELECT '" << supported_tools[backup_tool_name] << " not supported yet.'";
+          rewritten_query= static_cast<char *>(my_malloc(key_memory_mysqlbackup, strlen(oss.str().c_str()) + 1, MYF(0))); 
+          strncpy(rewritten_query, oss.str().c_str(), strlen(oss.str().c_str()));
+          event_parse->rewritten_query->str= rewritten_query;
+          event_parse->rewritten_query->length= strlen(oss.str().c_str());
+          break;
+        case MYSQLDUMP:
+          cerr << "Processing mysqldump" << endl;
+          if (backup_tool_basedir_value && 0 < strlen(backup_tool_basedir_value))
+            oss << "SELECT run_external(concat('" << backup_tool_basedir_value << "/" << supported_tools[backup_tool_name] << " " << backup_tool_options_value << " --socket=', @@socket, ' --all-databases > " << backup_dir_value << "/backup_', date_format(now(), '%Y-%m-%e_%H:%i:%s'), '.sql'))";
+          else
+            oss << "SELECT run_external(concat('" << supported_tools[backup_tool_name] << " " << backup_tool_options_value << " --socket=', @@socket, ' --all-databases > " << backup_dir_value << "/backup_', date_format(now(), '%Y-%m-%e_%H:%i:%s'), '.sql'))";
+          cerr << oss.str() << endl;
+          rewritten_query= static_cast<char *>(my_malloc(key_memory_mysqlbackup, strlen(oss.str().c_str()) + 1, MYF(0)));
+          strncpy(rewritten_query, oss.str().c_str(), strlen(oss.str().c_str()));
+          event_parse->rewritten_query->str= rewritten_query;
+          event_parse->rewritten_query->length= strlen(oss.str().c_str());
+          break;
+        case MYSQLPUMP:
+        default:
+          oss << "SELECT '" << supported_tools[backup_tool_name] << " not supported yet.'";
+          rewritten_query= static_cast<char *>(my_malloc(key_memory_mysqlbackup, strlen(oss.str().c_str()) + 1, MYF(0))); 
+          strncpy(rewritten_query, oss.str().c_str(), strlen(oss.str().c_str()));
+          event_parse->rewritten_query->str= rewritten_query;
+          event_parse->rewritten_query->length= strlen(oss.str().c_str());
+          break;
       }
     }
 
@@ -140,10 +152,11 @@ static st_mysql_audit mysqlbackup_plugin_descriptor= {
 
 /* System variables */
 
-static MYSQL_SYSVAR_STR(backup_dir, backup_dir_value, PLUGIN_VAR_MEMALLOC, "Default directory where to store backup", NULL, NULL, NULL);
-static MYSQL_SYSVAR_ENUM(backup_tool, backup_tool_name, PLUGIN_VAR_RQCMDARG, "Backup tool. Possible values: mysqldump|mysqlbackup", NULL, NULL, MYSQLDUMP, &supported_tools_typelib);
-static MYSQL_SYSVAR_STR(backup_tool_basedir, backup_tool_basedir_value, PLUGIN_VAR_MEMALLOC, "Base dir for backup tool. Default: \"\"", NULL, NULL, "");
-static MYSQL_SYSVAR_STR(backup_tool_options, backup_tool_options_value, PLUGIN_VAR_MEMALLOC, "Options for backup tool", NULL, NULL, "");
+static MYSQL_THDVAR_STR(backup_dir, /* backup_dir_value, */ PLUGIN_VAR_MEMALLOC, "Default directory where to store backup", NULL, NULL, NULL);
+static MYSQL_THDVAR_ENUM(backup_tool, /* backup_tool_name, */ PLUGIN_VAR_RQCMDARG, "Backup tool. Possible values: mysqldump|mysqlbackup|mysqlpump", NULL, NULL, MYSQLDUMP, &supported_tools_typelib);
+static MYSQL_THDVAR_STR(backup_tool_basedir, /* backup_tool_basedir_value, */ PLUGIN_VAR_MEMALLOC, "Base dir for backup tool. Default: \"\"", NULL, NULL, "");
+static MYSQL_THDVAR_STR(backup_tool_options, /* backup_tool_options_value, */ PLUGIN_VAR_MEMALLOC, "Options for backup tool", NULL, NULL, "");
+
 
 static struct st_mysql_sys_var *mysqlbackup_plugin_sys_vars[] = {
     MYSQL_SYSVAR(backup_dir),
@@ -152,6 +165,7 @@ static struct st_mysql_sys_var *mysqlbackup_plugin_sys_vars[] = {
     MYSQL_SYSVAR(backup_tool_options),
     NULL
 };
+
 
 mysql_declare_plugin(mysqlbackup_plugin)
 {
@@ -172,3 +186,7 @@ mysql_declare_plugin(mysqlbackup_plugin)
 mysql_declare_plugin_end;
 
 /* vim: set tabstop=2 shiftwidth=2 softtabstop=2: */
+/* 
+* :tabSize=2:indentSize=2:noTabs=true:
+* :folding=custom:collapseFolds=1: 
+*/
