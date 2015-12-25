@@ -58,10 +58,10 @@ static int mysqlbackup_plugin_init(MYSQL_PLUGIN plugin_ref)
 #define key_memory_mysqlbackup PSI_NOT_INSTRUMENTED
 #endif /* HAVE_PSI_INTERFACE */
 
-static char* backup_dir_value;
-ulong backup_tool_name;
-static char* backup_tool_basedir_value;
-static char* backup_tool_options_value;
+//static char* backup_dir_value;
+//ulong backup_tool_name;
+//static char* backup_tool_basedir_value;
+//static char* backup_tool_options_value;
 
 static const char* supported_tools[] = {
     "mysqlbackup",
@@ -83,6 +83,22 @@ enum supported_tools_t {
     MYSQLPUMP
 };
 
+/* System variables */
+
+static MYSQL_THDVAR_STR(backup_dir, /* backup_dir_value, */ PLUGIN_VAR_MEMALLOC, "Default directory where to store backup", NULL, NULL, NULL);
+static MYSQL_THDVAR_ENUM(backup_tool, /* backup_tool_name, */ PLUGIN_VAR_RQCMDARG, "Backup tool. Possible values: mysqldump|mysqlbackup|mysqlpump", NULL, NULL, MYSQLDUMP, &supported_tools_typelib);
+static MYSQL_THDVAR_STR(backup_tool_basedir, /* backup_tool_basedir_value, */ PLUGIN_VAR_MEMALLOC, "Base dir for backup tool. Default: \"\"", NULL, NULL, "");
+static MYSQL_THDVAR_STR(backup_tool_options, /* backup_tool_options_value, */ PLUGIN_VAR_MEMALLOC, "Options for backup tool", NULL, NULL, "");
+
+
+static struct st_mysql_sys_var *mysqlbackup_plugin_sys_vars[] = {
+    MYSQL_SYSVAR(backup_dir),
+    MYSQL_SYSVAR(backup_tool),
+    MYSQL_SYSVAR(backup_tool_basedir),
+    MYSQL_SYSVAR(backup_tool_options),
+    NULL
+};
+
 static int perform_backup(MYSQL_THD thd, mysql_event_class_t event_class,
                           const void *event)
 {
@@ -91,13 +107,18 @@ static int perform_backup(MYSQL_THD thd, mysql_event_class_t event_class,
 
   if (event_parse->event_subclass != MYSQL_AUDIT_PARSE_PREPARSE)
       return 0;
+    
+  const char* backup_dir_value= (const char *) THDVAR(thd, backup_dir);
+  ulong backup_tool_name= (ulong) THDVAR(thd, backup_tool);
+  const char* backup_tool_basedir_value= (const char*) THDVAR(thd, backup_tool_basedir);
+  const char* backup_tool_options_value= (const char*) THDVAR(thd, backup_tool_options);
 
   if (0 == strcasecmp("backup server",  event_parse->query.str))
   {
 
     if (!backup_dir_value)
     {
-      const char* newq= "SELECT 'You must set global variable mysqlbackup_plugin_backup_dir before running this command!'";
+      const char* newq= "SELECT 'You must set variable mysqlbackup_plugin_backup_dir before running this command!'";
       char *rewritten_query= static_cast<char *>(my_malloc(key_memory_mysqlbackup, strlen(newq) + 1, MYF(0)));
       strncpy(rewritten_query, newq, strlen(newq) + 1);
       event_parse->rewritten_query->str= rewritten_query;
@@ -149,23 +170,6 @@ static st_mysql_audit mysqlbackup_plugin_descriptor= {
   perform_backup,                               /* performs backup            */
   { 0, 0, (unsigned long) MYSQL_AUDIT_PARSE_ALL,}
 };
-
-/* System variables */
-
-static MYSQL_THDVAR_STR(backup_dir, /* backup_dir_value, */ PLUGIN_VAR_MEMALLOC, "Default directory where to store backup", NULL, NULL, NULL);
-static MYSQL_THDVAR_ENUM(backup_tool, /* backup_tool_name, */ PLUGIN_VAR_RQCMDARG, "Backup tool. Possible values: mysqldump|mysqlbackup|mysqlpump", NULL, NULL, MYSQLDUMP, &supported_tools_typelib);
-static MYSQL_THDVAR_STR(backup_tool_basedir, /* backup_tool_basedir_value, */ PLUGIN_VAR_MEMALLOC, "Base dir for backup tool. Default: \"\"", NULL, NULL, "");
-static MYSQL_THDVAR_STR(backup_tool_options, /* backup_tool_options_value, */ PLUGIN_VAR_MEMALLOC, "Options for backup tool", NULL, NULL, "");
-
-
-static struct st_mysql_sys_var *mysqlbackup_plugin_sys_vars[] = {
-    MYSQL_SYSVAR(backup_dir),
-    MYSQL_SYSVAR(backup_tool),
-    MYSQL_SYSVAR(backup_tool_basedir),
-    MYSQL_SYSVAR(backup_tool_options),
-    NULL
-};
-
 
 mysql_declare_plugin(mysqlbackup_plugin)
 {
