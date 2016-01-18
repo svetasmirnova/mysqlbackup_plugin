@@ -239,7 +239,7 @@ mysql_declare_plugin(mysqlbackup_plugin)
   NULL,                                         /* status variables   */
   mysqlbackup_plugin_sys_vars,                  /* system variables   */
   NULL,                                         /* config options     */
-  0,                                            /* flqgs              */
+  0,                                            /* flags              */
 }
 mysql_declare_plugin_end;
 
