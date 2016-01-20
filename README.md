@@ -2,11 +2,9 @@
 Introduction
 ============
 
-This plugin provides SQL interface for MySQL backup tools. Currently it only supports BACKUP SERVER statement and mysqldump. There are plans to support MySQL Enterprise Backup and other tools.
+This plugin provides SQL interface for MySQL backup tools. Currently it supports mysqldump, MySQL Enterprise Backup and mysqlpump. There are plans to support Percona XtraBackup and other tools. It provides single statement: BACKUP SERVER which makes full backup of the server. There are plans to support different types of backups and create own locks to prevent BACKUP SERVER to be called from multiple threads.
 
-Plugin explores [Query Rewrite Pre-Parse Plugin] (http://mysqlserverteam.com/write-yourself-a-query-rewrite-plugin-part-1/) To use it you need [mysql-5.7.5-labs-preview] (mysql-5.7.5-labs-preview) package from [MySQL Labs] (http://labs.mysql.com/)
-
-Plugin also explores [run_external UDF] (https://github.com/svetasmirnova/run_external) You need to compile it and install before using plugin.
+Plugin explores [Query Rewrite Pre-Parse Plugin] (http://mysqlserverteam.com/write-yourself-a-query-rewrite-plugin-part-1/), thus only available for MySQL 5.7 or newer.
 
 Compiling
 =========
@@ -42,14 +40,14 @@ Usage examples
     4 rows in set (0.00 sec)
     
     mysql> backup server;
-    +-----------------------------------------------------------------------------------------+
-    | You must set global variable mysqlbackup_plugin_backup_dir before running this command! |
-    +-----------------------------------------------------------------------------------------+
-    | You must set global variable mysqlbackup_plugin_backup_dir before running this command! |
-    +-----------------------------------------------------------------------------------------+
+    +----------------------------------------------------------------------------------+
+    | You must set variable mysqlbackup_plugin_backup_dir before running this command! |
+    +----------------------------------------------------------------------------------+
+    | You must set variable mysqlbackup_plugin_backup_dir before running this command! |
+    +----------------------------------------------------------------------------------+
     1 row in set, 1 warning (0.00 sec)
     
-    mysql> set global mysqlbackup_plugin_backup_dir='$HOME/src/BACKUPDIR/plugin_test';
+    mysql> set mysqlbackup_plugin_backup_dir='$HOME/src/BACKUPDIR/plugin_test';
     Query OK, 0 rows affected (0.00 sec)
     
     mysql> backup server;
@@ -68,7 +66,7 @@ Usage examples
     +-------+------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
     1 row in set (0.00 sec)
     
-    mysql> set global mysqlbackup_plugin_backup_tool_basedir='$HOME/build/mysql-trunk/bin';
+    mysql> set mysqlbackup_plugin_backup_tool_basedir='$HOME/build/mysql-trunk/bin';
     Query OK, 0 rows affected (0.00 sec)
     
     mysql> backup server;
