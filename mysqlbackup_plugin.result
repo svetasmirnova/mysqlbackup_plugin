@@ -4,12 +4,14 @@ You must set variable mysqlbackup_plugin_backup_dir before running this command!
 You must set variable mysqlbackup_plugin_backup_dir before running this command!
 Warnings:
 Note	1105	Query 'backup server' rewritten to 'SELECT 'You must set variable mysqlbackup_plugin_backup_dir before running this command!'' by a query rewrite plugin
+set mysqlbackup_plugin_backup_tool_basedir=concat(@@basedir, '/bin');
 set mysqlbackup_plugin_backup_dir='$HOME/BACKUPDIR/mysqlbackup_plugin_test';
 backup server;
 Backup finished with status OK!
 Backup finished with status OK!
 Warnings:
 Note	1105	Query 'backup server' rewritten to 'SELECT 'Backup finished with status OK!'' by a query rewrite plugin
+set mysqlbackup_plugin_backup_tool_basedir='';
 set mysqlbackup_plugin_backup_tool='mysqlbackup';
 backup server;
 Backup finished with status OK!
@@ -23,12 +25,15 @@ Backup finished with status OK!
 Backup finished with status OK!
 Warnings:
 Note	1105	Query 'backup server' rewritten to 'SELECT 'Backup finished with status OK!'' by a query rewrite plugin
+set mysqlbackup_plugin_backup_tool_basedir='';
+set mysqlbackup_plugin_backup_dir=concat('$HOME/BACKUPDIR/mysqlbackup_plugin_test/', date_format(now(), '%Y-%m-%d_%H:%m:%S'));
+set mysqlbackup_plugin_backup_tool_options=concat('--innodb-log-file-size=', @@innodb_log_file_size);
 set mysqlbackup_plugin_backup_tool='xtrabackup';
 backup server;
-xtrabackup not supported yet.
-xtrabackup not supported yet.
+Backup finished with status OK!
+Backup finished with status OK!
 Warnings:
-Note	1105	Query 'backup server' rewritten to 'SELECT 'xtrabackup not supported yet.'' by a query rewrite plugin
+Note	1105	Query 'backup server' rewritten to 'SELECT 'Backup finished with status OK!'' by a query rewrite plugin
 uninstall plugin mysqlbackup_plugin;
 Warnings:
 Warning	1620	Plugin is busy and will be uninstalled on shutdown

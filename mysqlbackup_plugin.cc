@@ -148,17 +148,19 @@ static int perform_backup(MYSQL_THD thd, mysql_event_class_t event_class,
             char timestamp[33];
             time (&rawtime);
             timeinfo = localtime (&rawtime);
-            strftime(timestamp, 32, "%Y-%m-%e_%H:%M:%S", timeinfo);
+            strftime(timestamp, 32, "%Y-%m-%d_%H:%M:%S", timeinfo);
             
             if (backup_tool_basedir_value && 0 < strlen(backup_tool_basedir_value))
               oss << backup_tool_basedir_value << "/" << supported_tools[backup_tool_name] << " " 
-                  << " --socket=" << mysqld_unix_port << " --user=" <<  thd->security_context()->user().str << " --all-databases > " 
-                  << backup_tool_options_value 
+                  << " --socket=" << mysqld_unix_port << " --user=" <<  thd->security_context()->user().str
+                  << " " << backup_tool_options_value 
+				  << " --all-databases > "
                   << backup_dir_value << "/backup_" << timestamp << ".sql";
             else
               oss << supported_tools[backup_tool_name] << " " 
-                  << " --socket=" << mysqld_unix_port << " --user=" <<  thd->security_context()->user().str << " --all-databases > "
-                  << backup_tool_options_value 
+                  << " --socket=" << mysqld_unix_port << " --user=" <<  thd->security_context()->user().str 
+                  << " " << backup_tool_options_value 
+				  << " --all-databases > "
                   << backup_dir_value << "/backup_" << timestamp << ".sql";
                   
             cerr << oss.str().c_str() << endl;
@@ -181,13 +183,13 @@ static int perform_backup(MYSQL_THD thd, mysql_event_class_t event_class,
             if (backup_tool_basedir_value && 0 < strlen(backup_tool_basedir_value))
               oss << backup_tool_basedir_value << "/" << supported_tools[backup_tool_name]
                   << " --socket=" << mysqld_unix_port << " --user=" <<  thd->security_context()->user().str
-                  << backup_tool_options_value 
+                  << " " << backup_tool_options_value 
                   << " --with-timestamp --backup-dir=" << backup_dir_value
                   << " backup ";
             else
               oss << supported_tools[backup_tool_name]
                   << " --socket=" << mysqld_unix_port << " --user=" <<  thd->security_context()->user().str
-                  << backup_tool_options_value 
+                  << " " << backup_tool_options_value 
                   << " --with-timestamp --backup-dir=" << backup_dir_value
                   << " backup ";
             
@@ -206,6 +208,37 @@ static int perform_backup(MYSQL_THD thd, mysql_event_class_t event_class,
             _rewrite_query(event, event_parse, oss.str().c_str());
             
             break;
+		case XTRABACKUP:
+			if (backup_tool_basedir_value && 0 < strlen(backup_tool_basedir_value))
+			  oss << backup_tool_basedir_value << "/" << supported_tools[backup_tool_name]
+				  << " --socket=" << mysqld_unix_port << " --user=" <<  thd->security_context()->user().str
+				  << " " << backup_tool_options_value
+				  << " --target-dir=" << backup_dir_value
+				  << " --datadir=" << mysql_real_data_home_ptr
+				  << " --backup ";
+			else
+			  oss << supported_tools[backup_tool_name]
+				  << " --socket=" << mysqld_unix_port << " --user=" <<  thd->security_context()->user().str
+				  << " " << backup_tool_options_value
+				  << " --target-dir=" << backup_dir_value
+				  << " --datadir=" << mysql_real_data_home_ptr
+				  << " --backup ";
+
+			cerr << oss.str().c_str() << endl;
+
+			result = system(oss.str().c_str());
+
+			oss.str("");
+			oss.clear();
+
+			if (0 != result)
+			  oss << "SELECT '" << supported_tools[backup_tool_name] <<  " failed'";
+			else
+			  oss << "SELECT 'Backup finished with status OK!'";
+
+			_rewrite_query(event, event_parse, oss.str().c_str());
+
+			break;
         default:
           oss << "SELECT '" << supported_tools[backup_tool_name] << " not supported yet.'";
           _rewrite_query(event, event_parse, oss.str().c_str());
