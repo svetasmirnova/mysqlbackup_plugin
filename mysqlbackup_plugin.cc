@@ -90,7 +90,7 @@ enum supported_tools_t {
 /* System variables */
 
 static MYSQL_THDVAR_STR(backup_dir, /* backup_dir_value, */ PLUGIN_VAR_MEMALLOC, "Default directory where to store backup", NULL, NULL, NULL);
-static MYSQL_THDVAR_ENUM(backup_tool, /* backup_tool_name, */ PLUGIN_VAR_RQCMDARG, "Backup tool. Possible values: mysqldump|mysqlbackup|mysqlpump", NULL, NULL, MYSQLDUMP, &supported_tools_typelib);
+static MYSQL_THDVAR_ENUM(backup_tool, /* backup_tool_name, */ PLUGIN_VAR_RQCMDARG, "Backup tool. Possible values: mysqldump|mysqlbackup|mysqlpump|xtrabackup", NULL, NULL, MYSQLDUMP, &supported_tools_typelib);
 static MYSQL_THDVAR_STR(backup_tool_basedir, /* backup_tool_basedir_value, */ PLUGIN_VAR_MEMALLOC, "Base dir for backup tool. Default: \"\"", NULL, NULL, "");
 static MYSQL_THDVAR_STR(backup_tool_options, /* backup_tool_options_value, */ PLUGIN_VAR_MEMALLOC, "Options for backup tool", NULL, NULL, "");
 
