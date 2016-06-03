@@ -2,7 +2,7 @@
 Introduction
 ============
 
-This plugin provides SQL interface for MySQL backup tools. Currently it supports mysqldump, MySQL Enterprise Backup,Percona XtraBackup and mysqlpump. There are plans to support other tools. It provides single statement: BACKUP SERVER which makes full backup of the server. There are plans to support different types of backups and create own locks to prevent BACKUP SERVER to be called from multiple threads.
+This plugin provides SQL interface for MySQL backup tools. Currently it supports mysqldump, MySQL Enterprise Backup, Percona XtraBackup and mysqlpump. There are plans to support other tools. It provides single statement: BACKUP SERVER which makes full backup of the server. There are plans to support different types of backups and create own locks to prevent BACKUP SERVER to be called from multiple threads.
 
 Plugin explores [Query Rewrite Pre-Parse Plugin] (http://mysqlserverteam.com/write-yourself-a-query-rewrite-plugin-part-1/), thus only available for MySQL 5.7 or newer.
 
