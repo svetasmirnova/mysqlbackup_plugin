@@ -38,6 +38,12 @@
 using namespace std;
 static MYSQL_PLUGIN plugin_info_ptr;
 
+/* Number of active backup jobs */
+ulong backup_jobs;
+
+/* Prevent parallel backup execution? */
+static my_bool backup_lock = false;
+
 /* instrument the memory allocation */
 #ifdef HAVE_PSI_INTERFACE
 static PSI_memory_key key_memory_mysqlbackup;
@@ -53,10 +59,12 @@ static int mysqlbackup_plugin_init(MYSQL_PLUGIN plugin_ref)
   const char* category= "sql";
   int count;
 
+  backup_jobs= 0;
+
   count= array_elements(all_rewrite_memory);
   mysql_memory_register(category, all_rewrite_memory, count);
   return 0; /* success */
-}
+};
 
 #else
 
@@ -64,6 +72,34 @@ static int mysqlbackup_plugin_init(MYSQL_PLUGIN plugin_ref)
 #define key_memory_mysqlbackup PSI_NOT_INSTRUMENTED
 
 #endif /* HAVE_PSI_INTERFACE */
+
+/* Check if no backup is running. Otherwise refuse changing lock mode */
+static int mysqlbackup_check_lock(
+	THD 	*thd,					/* In:  Thread handle */
+	struct 	st_mysql_sys_var* var,	/* In:  Pointer to system variable */
+	void* 	save,					/* Out: Immediate result */
+	struct 	st_mysql_value* value	/* In:  Variable value */
+)
+{
+	if (0 < backup_jobs)
+	  return 1;
+	
+	long long intbuf = 0;
+	value->val_int(value, &intbuf);
+	*static_cast<my_bool*>(save) = static_cast<my_bool>(intbuf);
+	return 0;
+};
+
+/* Update lock mode */
+static void mysqlbackup_update_lock(
+	THD 			*thd,					/* In:  Thread handle */
+	struct 			st_mysql_sys_var* var,	/* In:  Pointer to system variable */
+	void*			val_ptr,				/* Out: System variable value */
+	const void* 	save					/* In:  Immediate result of the check function*/
+)
+{
+	backup_lock = *static_cast<my_bool*>(val_ptr) = *static_cast<const my_bool*>(save);
+};
 
 static const char* supported_tools[] = {
     "mysqlbackup",
@@ -89,18 +125,27 @@ enum supported_tools_t {
 
 /* System variables */
 
+
 static MYSQL_THDVAR_STR(backup_dir, /* backup_dir_value, */ PLUGIN_VAR_MEMALLOC, "Default directory where to store backup", NULL, NULL, NULL);
 static MYSQL_THDVAR_ENUM(backup_tool, /* backup_tool_name, */ PLUGIN_VAR_RQCMDARG, "Backup tool. Possible values: mysqldump|mysqlbackup|mysqlpump|xtrabackup", NULL, NULL, MYSQLDUMP, &supported_tools_typelib);
 static MYSQL_THDVAR_STR(backup_tool_basedir, /* backup_tool_basedir_value, */ PLUGIN_VAR_MEMALLOC, "Base dir for backup tool. Default: \"\"", NULL, NULL, "");
 static MYSQL_THDVAR_STR(backup_tool_options, /* backup_tool_options_value, */ PLUGIN_VAR_MEMALLOC, "Options for backup tool", NULL, NULL, "");
-
+static MYSQL_SYSVAR_BOOL(lock, backup_lock, PLUGIN_VAR_RQCMDARG, "Use lock to prevent parallel execution of backups. Default: don't lock", mysqlbackup_check_lock, mysqlbackup_update_lock, FALSE);
 
 static struct st_mysql_sys_var *mysqlbackup_plugin_sys_vars[] = {
     MYSQL_SYSVAR(backup_dir),
     MYSQL_SYSVAR(backup_tool),
     MYSQL_SYSVAR(backup_tool_basedir),
     MYSQL_SYSVAR(backup_tool_options),
+    MYSQL_SYSVAR(lock),
     NULL
+};
+
+/* Status variables */
+
+static struct st_mysql_show_var mysqlbackup_plugin_status_vars[] = {
+	{"Mysqlbackup_plugin_active_jobs", (char*) &backup_jobs, SHOW_LONG_NOFLUSH, SHOW_SCOPE_GLOBAL},
+	{NullS, NullS, SHOW_LONG, SHOW_SCOPE_GLOBAL}
 };
 
 
@@ -138,6 +183,15 @@ static int perform_backup(MYSQL_THD thd, mysql_event_class_t event_class,
       cerr << "Processing " << supported_tools[backup_tool_name] << ", datadir:  " << mysql_real_data_home_ptr << ", host: " << glob_hostname << ", port: " << mysqld_port << endl;
       cerr << ", socket: " << mysqld_unix_port << endl;
       
+      // TODO: protect with mutexes
+	  if (backup_lock && 0 < backup_jobs)
+      {
+        _rewrite_query(event, event_parse, "SELECT 'Another BACKUP SERVER command running!'");
+      }
+      else
+      {
+      backup_jobs++;
+
       switch(backup_tool_name) {
         case MYSQLDUMP:
         case MYSQLPUMP:
@@ -244,6 +298,9 @@ static int perform_backup(MYSQL_THD thd, mysql_event_class_t event_class,
           _rewrite_query(event, event_parse, oss.str().c_str());
           break;
       }
+	  
+      backup_jobs--;
+      }
     }
 
     *((int *)event_parse->flags)|= (int)MYSQL_AUDIT_PARSE_REWRITE_PLUGIN_QUERY_REWRITTEN;
@@ -268,8 +325,8 @@ mysql_declare_plugin(mysqlbackup_plugin)
   PLUGIN_LICENSE_GPL,
   mysqlbackup_plugin_init,
   NULL,                                         /* mysqlbackup_plugin_deinit - TODO */
-  0x0002,                                       /* version 0.0.2      */
-  NULL,                                         /* status variables   */
+  0x0002,                                       /* version 0.0.3      */
+  mysqlbackup_plugin_status_vars,               /* status variables   */
   mysqlbackup_plugin_sys_vars,                  /* system variables   */
   NULL,                                         /* config options     */
   0,                                            /* flags              */
